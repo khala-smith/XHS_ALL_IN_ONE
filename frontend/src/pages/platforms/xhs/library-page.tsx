@@ -58,6 +58,7 @@ import {
   fetchSavedNoteComments,
   fetchSavedNotes,
   fetchTags,
+  resolveAssetUrl,
 } from "../../../lib/api";
 import { formatShanghaiTime } from "../../../lib/time";
 import type { NoteAsset, NoteComment, NotesExportResponse, SavedNote, Tag as TagType } from "../../../types";
@@ -413,7 +414,7 @@ export function XhsLibraryPage() {
                   cover={
                     <div style={{ position: "relative", background: "#262626" }}>
                       <Checkbox checked={selectedNoteIdSet.has(note.id)} onClick={(e) => { e.stopPropagation(); toggleNoteSelection(note.id); }} style={{ position: "absolute", top: 8, left: 8, zIndex: 2 }} />
-                      {cover ? <img src={cover} alt={note.title} referrerPolicy="no-referrer" style={{ width: "100%", aspectRatio: "1/1", objectFit: "cover", display: "block" }} /> : <div style={{ width: "100%", aspectRatio: "1/1", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.2)", fontSize: 28 }}><PictureOutlined /></div>}
+                      {cover ? <img src={resolveAssetUrl(cover)} alt={note.title} referrerPolicy="no-referrer" style={{ width: "100%", aspectRatio: "1/1", objectFit: "cover", display: "block" }} /> : <div style={{ width: "100%", aspectRatio: "1/1", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,.2)", fontSize: 28 }}><PictureOutlined /></div>}
                       <Tag color={kind.includes("video") ? "purple" : "blue"} style={{ position: "absolute", top: 8, right: 8 }} icon={kind.includes("video") ? <PlayCircleOutlined /> : <PictureOutlined />}>{kind.includes("video") ? "视频" : "图文"}</Tag>
                     </div>
                   }>
@@ -481,9 +482,9 @@ export function XhsLibraryPage() {
                     {selectedAssets.map((a) => (
                       a.asset_type === "video" ? (
                         <div key={a.id} style={{ width: 80, height: 80, background: "#262626", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <Button type="link" icon={<PlayCircleOutlined />} href={a.url} target="_blank" rel="noreferrer">视频</Button>
+                          <Button type="link" icon={<PlayCircleOutlined />} href={resolveAssetUrl(a.url)} target="_blank" rel="noreferrer">视频</Button>
                         </div>
-                      ) : <Image key={a.id} src={a.url} width={80} height={80} style={{ objectFit: "cover", borderRadius: 6 }} referrerPolicy="no-referrer" />
+                      ) : <Image key={a.id} src={resolveAssetUrl(a.url)} width={80} height={80} style={{ objectFit: "cover", borderRadius: 6 }} />
                     ))}
                   </Space>
                 </Image.PreviewGroup>

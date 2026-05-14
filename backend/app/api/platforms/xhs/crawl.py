@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import time
+import urllib.parse
 from typing import Any, Generator, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
@@ -211,6 +212,28 @@ def _crawl_data_item(
     }
 
 
+def _extract_note_id(url: str) -> str:
+    parsed = urllib.parse.urlparse(url)
+    path_parts = [p for p in parsed.path.split("/") if p]
+    return path_parts[-1] if path_parts else ""
+
+
+def _url_has_xsec_token(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url)
+    params = urllib.parse.parse_qs(parsed.query)
+    token = params.get("xsec_token", [""])[0]
+    return bool(token.strip())
+
+
+def _smart_get_note_info(adapter: Any, url: str) -> tuple[bool, str, Any]:
+    if _url_has_xsec_token(url):
+        return adapter.get_note_info(url)
+    note_id = _extract_note_id(url)
+    if not note_id:
+        return False, "无法从 URL 解析 note_id", None
+    return adapter.get_note_info_by_id(note_id)
+
+
 def _owned_pc_account(db: Session, current_user: User, account_id: int) -> PlatformAccount:
     account = db.get(PlatformAccount, account_id)
     if (
@@ -278,9 +301,9 @@ def crawl_note_urls(
     normalized_items: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
     for url in payload.urls:
-        success, message, raw_payload = adapter.get_note_info(url)
+        success, message, raw_payload = _smart_get_note_info(adapter, url)
         if success:
-            normalized_items.append(_normalize_detail_payload(raw_payload or {}))
+            normalized_items.append(_normalize_detail_payload(raw_payload or {}, source_url=url))
         else:
             errors.append({"url": url, "error": message or "XHS note detail crawl failed"})
 
@@ -297,6 +320,184 @@ def crawl_note_urls(
         "errors": errors,
         "items": [_serialize_note(note) for note in saved_notes],
     }
+
+
+class FetchNotesRequest(BaseModel):
+    account_id: int
+    urls: list[str] = Field(min_length=1, max_length=20)
+    fetch_comments: bool = False
+
+
+@router.post("/fetch")
+def fetch_notes(
+    payload: FetchNotesRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    adapter_factory=Depends(get_xhs_pc_api_adapter_factory),
+):
+    """
+    抓取笔记并保存。接受带 xsec_token 的完整链接（如 app 分享链接）。
+    """
+    account = _owned_pc_account(db, current_user, payload.account_id)
+    cookies = _get_owned_pc_account_cookies(db, current_user, payload.account_id)
+    task = _create_crawl_task(
+        db, current_user, "fetch", {"account_id": account.id, "url_count": len(payload.urls)},
+    )
+    adapter = adapter_factory(cookies)
+    normalized_items: list[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
+
+    for url in payload.urls:
+        note_id = _extract_note_id(url)
+        if not note_id:
+            results.append({"url": url, "status": "failed", "error": "无法从 URL 解析 note_id"})
+            continue
+
+        success, message, raw_payload = _smart_get_note_info(adapter, url)
+        if not success:
+            results.append({"url": url, "status": "failed", "error": message or "请求失败"})
+            continue
+
+        normalized = _normalize_detail_payload(raw_payload or {}, source_url=url)
+        normalized_items.append(normalized)
+        results.append({"url": url, "status": "success", "note_id": note_id})
+
+    saved_notes = _save_normalized_notes(db, account, normalized_items) if normalized_items else []
+    success_count = len([r for r in results if r["status"] == "success"])
+    failed_count = len(results) - success_count
+
+    task = _complete_task(
+        db, task,
+        {"result_count": success_count, "saved_count": len(saved_notes), "failed_count": failed_count},
+    )
+    return {
+        "task": serialize_task(task),
+        "result_count": success_count,
+        "saved_count": len(saved_notes),
+        "results": results,
+        "items": [_serialize_note(note) for note in saved_notes],
+    }
+
+
+@router.get("/notes/{note_id}")
+def get_crawled_note(
+    note_id: str,
+    request: Request,
+    format: str = "json",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    获取已保存的笔记。format=json 返回结构化数据，format=markdown 返回 JSON（content 字段为 markdown）。
+    """
+    note = db.scalars(
+        select(Note).where(Note.user_id == current_user.id, Note.note_id == note_id)
+    ).first()
+    if note is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="笔记未找到")
+
+    assets = db.scalars(
+        select(NoteAsset).where(NoteAsset.note_id == note.id).order_by(NoteAsset.sort_order)
+    ).all()
+
+    # Build absolute base URL for assets
+    root_path = request.scope.get("root_path", "")
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", ""))
+    base_url = f"{scheme}://{host}{root_path}" if host else root_path
+
+    raw = note.raw_json or {}
+    asset_list = [
+        {
+            "id": a.id,
+            "type": a.asset_type,
+            "url": a.url,
+            "local_url": f"{base_url}/api/files/media/{a.local_path}" if a.local_path else None,
+        }
+        for a in assets
+    ]
+
+    if format == "markdown":
+        md = _render_markdown(note, assets, base_url)
+        return {
+            "note_id": note.note_id,
+            "title": note.title,
+            "author_name": note.author_name,
+            "url": f"https://www.xiaohongshu.com/explore/{note.note_id}",
+            "likes": raw.get("likes", 0),
+            "collects": raw.get("collects", 0),
+            "comments": raw.get("comments", 0),
+            "tags": raw.get("tags", []),
+            "content": md,
+            "assets": asset_list,
+            "created_at": note.created_at.isoformat(),
+        }
+
+    return {
+        "id": note.id,
+        "note_id": note.note_id,
+        "title": note.title,
+        "content": note.content,
+        "author_name": note.author_name,
+        "created_at": note.created_at.isoformat(),
+        "assets": asset_list,
+        "raw_json": note.raw_json,
+    }
+
+
+def _render_markdown(note: Note, assets: list[NoteAsset], base_url: str = "") -> str:
+    lines: list[str] = []
+
+    lines.append(f"# {note.title}" if note.title else "# (无标题)")
+    lines.append("")
+
+    raw = note.raw_json or {}
+    if note.author_name:
+        lines.append(f"> **作者**: {note.author_name}")
+    note_url = f"https://www.xiaohongshu.com/explore/{note.note_id}"
+    lines.append(f"> **链接**: {note_url}")
+    likes = raw.get("likes", 0)
+    collects = raw.get("collects", 0)
+    comments_count = raw.get("comments", 0)
+    if likes or collects or comments_count:
+        lines.append(f"> **互动**: {likes} 赞 · {collects} 收藏 · {comments_count} 评论")
+    lines.append("")
+
+    tags = raw.get("tags")
+    if tags and isinstance(tags, list):
+        lines.append(" ".join(f"`#{t}`" for t in tags))
+        lines.append("")
+
+    lines.append("---")
+    lines.append("")
+
+    if note.content:
+        lines.append(note.content)
+        lines.append("")
+
+    images = [a for a in assets if a.asset_type == "image"]
+    if images:
+        lines.append("---")
+        lines.append("")
+        for i, asset in enumerate(images, 1):
+            if asset.local_path:
+                img_url = f"{base_url}/api/files/media/{asset.local_path}"
+            else:
+                img_url = asset.url
+            lines.append(f"![图片{i}]({img_url})")
+            lines.append("")
+
+    videos = [a for a in assets if a.asset_type == "video"]
+    if videos:
+        for asset in videos:
+            if asset.local_path:
+                vid_url = f"{base_url}/api/files/media/{asset.local_path}"
+            else:
+                vid_url = asset.url
+            lines.append(f"[视频链接]({vid_url})")
+            lines.append("")
+
+    return "\n".join(lines)
 
 
 @router.post("/user-notes")
@@ -372,9 +573,9 @@ def crawl_data(
         try:
             if payload.mode == "note_urls":
                 for index, url in enumerate(payload.urls):
-                    success, message, raw_payload = adapter.get_note_info(url)
+                    success, message, raw_payload = _smart_get_note_info(adapter, url)
                     if success:
-                        note = _normalize_detail_payload(raw_payload or {})
+                        note = _normalize_detail_payload(raw_payload or {}, source_url=url)
                         note["note_url"] = note.get("note_url") or url
                         normalized_for_save.append(note)
                         comments_list: list[dict[str, Any]] = []
@@ -476,13 +677,19 @@ def crawl_data(
             error_occurred = True
             yield _sse_event({"type": "error", "message": str(exc)})
 
+        if normalized_for_save:
+            try:
+                _save_normalized_notes(db, account, normalized_for_save)
+            except Exception as save_exc:
+                yield _sse_event({"type": "error", "message": f"保存笔记失败: {save_exc}"})
+
         success_count = len([i for i in items if i["status"] == "success"])
         failed_count = len(items) - success_count
         try:
             if error_occurred:
                 _fail_task(db, task, "partial failure")
             else:
-                _complete_task(db, task, {"result_count": success_count, "failed_count": failed_count})
+                _complete_task(db, task, {"result_count": success_count, "failed_count": failed_count, "saved_count": len(normalized_for_save)})
         except Exception:
             pass
 

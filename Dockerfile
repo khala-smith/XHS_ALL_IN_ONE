@@ -22,6 +22,8 @@ RUN npm ci --no-audit --no-fund 2>/dev/null || npm install --no-audit --no-fund
 
 # Copy source and build
 COPY frontend/ ./
+ARG VITE_BASE_PATH="/services/xhs-aio/"
+ENV VITE_BASE_PATH=${VITE_BASE_PATH}
 RUN npm run build
 
 # ---------------------------------------------------------------------------
@@ -35,7 +37,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     build-essential \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 

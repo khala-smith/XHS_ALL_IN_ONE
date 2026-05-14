@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: xhs-config
+  namespace: sandbox
+data:
+  config.yaml: |
+    server:
+      host: "0.0.0.0"
+      port: 8000
+      cors_origins: "https://sandbox.cyber-psychosis.net,http://sandbox.cyber-psychosis.net"
+
+    database:
+      type: "sqlite"
+      sqlite_path: "/app/data/spider_xhs.db"
+
+    scheduler:
+      enabled: true
+      interval_seconds: 60
+
+    frontend:
+      serve_static: true
+      build_dir: "./frontend/dist"

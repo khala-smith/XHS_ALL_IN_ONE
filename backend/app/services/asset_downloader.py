@@ -13,7 +13,11 @@ def download_asset_to_local(url: str, user_id: int, asset_type: str) -> str | No
         return None
     try:
         import requests
-        resp = requests.get(url, timeout=30, headers={"Referer": ""})
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "Referer": "https://www.xiaohongshu.com/",
+        }
+        resp = requests.get(url, timeout=30, headers=headers)
         resp.raise_for_status()
         content = resp.content
         if len(content) < 100:

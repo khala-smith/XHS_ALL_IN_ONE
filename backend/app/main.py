@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from backend.app.api import accounts, ai, auth, auto_tasks, drafts, files, keyword_groups, login_sessions, model_configs, notes, notifications, publish, tags, tasks
+from backend.app.api import accounts, ai, api_keys, auth, auto_tasks, drafts, files, keyword_groups, login_sessions, model_configs, notes, notifications, publish, tags, tasks
 from backend.app.api.platforms import registry
 from backend.app.api.platforms.xhs import analytics, crawl, creator, monitoring, pc
 from backend.app.core.config import get_settings
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title=settings.api_title, lifespan=lifespan)
+    app = FastAPI(title=settings.api_title, lifespan=lifespan, root_path=settings.root_path)
 
     origins = [origin.strip() for origin in settings.backend_cors_origins.split(",") if origin.strip()]
     app.add_middleware(
@@ -48,6 +48,7 @@ def create_app() -> FastAPI:
 
     app.include_router(registry.router, prefix="/api")
     app.include_router(auth.router, prefix="/api")
+    app.include_router(api_keys.router, prefix="/api")
     app.include_router(accounts.router, prefix="/api")
     app.include_router(login_sessions.router, prefix="/api")
     app.include_router(notes.router, prefix="/api")

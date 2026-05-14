@@ -715,3 +715,27 @@ export type AppNotification = {
   read: boolean;
   created_at: string;
 };
+
+export type ApiKeyInfo = {
+  id: number;
+  name: string;
+  key_prefix: string;
+  is_active: boolean;
+  last_used_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+};
+
+export type CreateApiKeyPayload = {
+  name: string;
+  expires_in_days?: number | null;
+};
+
+export type CreateApiKeyResponse = {
+  id: number;
+  name: string;
+  key: string;
+  key_prefix: string;
+  expires_at: string | null;
+  created_at: string;
+};

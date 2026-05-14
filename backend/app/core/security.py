@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
-import json
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -11,12 +9,14 @@ from typing import Optional
 
 from cryptography.fernet import Fernet
 from fastapi import HTTPException, status
+from jose import JWTError, jwt
 
 from backend.app.core.config import get_settings
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 PASSWORD_ITERATIONS = 260_000
+JWT_ALGORITHM = "HS256"
 
 
 def hash_password(password: str) -> str:
@@ -36,31 +36,10 @@ def verify_password(password: str, password_hash: str) -> bool:
     return secrets.compare_digest(legacy_hash, password_hash)
 
 
-def _base64url_encode(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).decode("utf-8").rstrip("=")
-
-
-def _base64url_decode(value: str) -> bytes:
-    padding = "=" * (-len(value) % 4)
-    return base64.urlsafe_b64decode(f"{value}{padding}".encode("utf-8"))
-
-
-def _sign_token(payload: dict) -> str:
-    header = {"alg": "HS256", "typ": "JWT"}
-    signing_input = ".".join(
-        [
-            _base64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8")),
-            _base64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8")),
-        ]
-    )
-    signature = hmac.new(get_settings().secret_key.encode("utf-8"), signing_input.encode("utf-8"), hashlib.sha256).digest()
-    return f"{signing_input}.{_base64url_encode(signature)}"
-
-
 def _create_token(user_id: int, expires_delta: timedelta, token_type: str) -> str:
     expires_at = datetime.now(timezone.utc) + expires_delta
-    payload = {"user_id": user_id, "token_type": token_type, "exp": int(expires_at.timestamp())}
-    return _sign_token(payload)
+    payload = {"user_id": user_id, "token_type": token_type, "exp": expires_at}
+    return jwt.encode(payload, get_settings().secret_key, algorithm=JWT_ALGORITHM)
 
 
 def create_access_token(user_id: int) -> str:
@@ -78,31 +57,28 @@ def decode_token(token: str) -> dict:
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        header_value, payload_value, signature_value = token.split(".")
-    except ValueError as exc:
+        payload = jwt.decode(token, get_settings().secret_key, algorithms=[JWT_ALGORITHM])
+    except JWTError as exc:
         raise credentials_exception from exc
 
-    signing_input = f"{header_value}.{payload_value}"
-    expected_signature = hmac.new(
-        get_settings().secret_key.encode("utf-8"),
-        signing_input.encode("utf-8"),
-        hashlib.sha256,
-    ).digest()
-    actual_signature = _base64url_decode(signature_value)
-    if not hmac.compare_digest(actual_signature, expected_signature):
-        raise credentials_exception
-
-    try:
-        payload = json.loads(_base64url_decode(payload_value))
-    except (json.JSONDecodeError, ValueError) as exc:
-        raise credentials_exception from exc
-
-    expires_at = payload.get("exp")
-    if not isinstance(expires_at, int) or expires_at < int(datetime.now(timezone.utc).timestamp()):
-        raise credentials_exception
     if not isinstance(payload.get("user_id"), int):
         raise credentials_exception
     return payload
+
+
+def generate_api_key() -> tuple[str, str]:
+    """Generate an API key and return (raw_key, key_hash).
+
+    The raw key is shown to the user once; only the hash is stored.
+    """
+    raw_key = f"xhs_{secrets.token_urlsafe(32)}"
+    key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    return raw_key, key_hash
+
+
+def verify_api_key(raw_key: str, key_hash: str) -> bool:
+    computed = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    return secrets.compare_digest(computed, key_hash)
 
 
 def _derive_fernet_key(secret: str) -> bytes:

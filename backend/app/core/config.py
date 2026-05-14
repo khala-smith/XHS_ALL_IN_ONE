@@ -115,6 +115,9 @@ class Settings(BaseSettings):
     frontend_serve_static: bool = False
     frontend_build_dir: str = "./frontend/dist"
 
+    # Reverse proxy root path (for Swagger UI behind prefix-stripping proxies)
+    root_path: str = ""
+
     if hasattr(BaseSettings, "model_config"):
         model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xhs-aio
+  namespace: sandbox
+  labels:
+    app: xhs-aio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: xhs-aio
+  template:
+    metadata:
+      labels:
+        app: xhs-aio
+    spec:
+      imagePullSecrets:
+        - name: tcr-cred
+      containers:
+        - name: xhs
+          image: sgccr.ccs.tencentyun.com/mars-sandbox/xhs-aio:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: CONFIG_FILE
+              value: /app/config/k8s-config.yaml
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: xhs-secret
+                  key: SECRET_KEY
+            - name: ROOT_PATH
+              value: /services/xhs-aio
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: media
+              mountPath: /app/backend/app/storage/media
+            - name: config
+              mountPath: /app/config/k8s-config.yaml
+              subPath: config.yaml
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1000m"
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: xhs-data
+        - name: media
+          persistentVolumeClaim:
+            claimName: xhs-media
+        - name: config
+          configMap:
+            name: xhs-config

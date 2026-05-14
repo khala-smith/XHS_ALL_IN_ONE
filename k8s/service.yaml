@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: xhs-aio
+  namespace: sandbox
+spec:
+  selector:
+    app: xhs-aio
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP

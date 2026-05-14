@@ -43,6 +43,13 @@ class XhsPcApiAdapter:
             api = XHS_Apis()
             return api.get_note_info(url=url, cookies_str=self.cookies)
 
+    def get_note_info_by_id(self, note_id: str) -> Any:
+        with direct_xhs_request_env():
+            from apis.xhs_pc_apis import XHS_Apis
+
+            api = XHS_Apis()
+            return api.get_note_info_by_id(note_id=note_id, cookies_str=self.cookies)
+
     def get_note_comments(self, note_url: str) -> Any:
         with direct_xhs_request_env():
             from apis.xhs_pc_apis import XHS_Apis

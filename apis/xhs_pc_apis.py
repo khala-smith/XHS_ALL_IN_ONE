@@ -400,6 +400,37 @@ class XHS_Apis():
         return success, msg, res_json
 
 
+    def get_note_info_by_id(self, note_id: str, cookies_str: str, proxies: dict = None):
+        """
+            通过 note_id 直接获取笔记详情（不需要 xsec_token）
+            使用 xsec_source=pc_note 请求，与浏览器直接访问笔记链接行为一致
+        """
+        res_json = None
+        try:
+            api = "/api/sns/web/v1/feed"
+            data = {
+                "source_note_id": note_id,
+                "image_formats": ["jpg", "webp", "avif"],
+                "extra": {"need_body_topic": "1"},
+                "xsec_source": "pc_note",
+                "xsec_token": ""
+            }
+            headers, cookies, data = generate_request_params(cookies_str, api, data, 'POST')
+            headers["x-rap-param"] = generate_x_rap_param(api, data)
+            headers["xy-direction"] = "13"
+            response = requests.post(self.base_url + api, headers=headers, data=data, cookies=cookies, proxies=proxies, timeout=REQUEST_TIMEOUT)
+            res_json = response.json()
+            success, msg = res_json.get("success", False), res_json.get("msg", "")
+            if success and res_json.get("code", 0) == 0:
+                items = (res_json.get("data") or {}).get("items") or []
+                if items:
+                    return True, msg, res_json
+            return False, msg or "笔记获取失败", res_json
+        except Exception as e:
+            success = False
+            msg = _log_api_error(e)
+        return success, msg, res_json
+
     def get_search_keyword(self, word: str, cookies_str: str, proxies: dict = None):
         """
             获取搜索关键词

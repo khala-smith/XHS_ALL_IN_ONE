@@ -24,9 +24,11 @@ import { XhsPublishPage } from "../pages/platforms/xhs/publish-page";
 import { XhsVideoStudioPage } from "../pages/platforms/xhs/video-studio-page";
 import { XhsSectionPage } from "../pages/platforms/xhs/xhs-section-page";
 
+const BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, "") || "";
+
 export function AppRouter() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={BASE_PATH}>
       <Routes>
         <Route path="/" element={<Navigate to="/platform-select" replace />} />
         <Route

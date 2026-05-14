@@ -77,8 +77,18 @@ import type {
   XhsQrLoginSession
 } from "../types";
 
+const APP_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const API_BASE = `${APP_BASE}/api`;
+
+export function resolveAssetUrl(path: string): string {
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  if (path.startsWith("/api/")) return `${APP_BASE}${path}`;
+  return path;
+}
+
 const http = axios.create({
-  baseURL: "/api",
+  baseURL: API_BASE,
   timeout: 120000,
 });
 
@@ -398,7 +408,7 @@ export async function crawlXhsDataStream(
   onError?: (message: string) => void,
 ): Promise<{ total: number; success_count: number; failed_count: number }> {
   const token = getAccessToken();
-  const response = await fetch("/api/xhs/crawl/data", {
+  const response = await fetch(`${API_BASE}/xhs/crawl/data`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(payload),
@@ -872,5 +882,30 @@ export async function deleteAutoTask(taskId: number): Promise<{ id: number; stat
 
 export async function runAutoTask(taskId: number): Promise<AutoTaskRunResult> {
   const response = await http.post<AutoTaskRunResult>(`/auto-tasks/${taskId}/run`);
+  return response.data;
+}
+
+// API Keys
+export async function fetchApiKeys(): Promise<{ items: import("../types").ApiKeyInfo[] }> {
+  const response = await http.get<{ items: import("../types").ApiKeyInfo[] }>("/api-keys");
+  return response.data;
+}
+
+export async function createApiKey(payload: import("../types").CreateApiKeyPayload): Promise<import("../types").CreateApiKeyResponse> {
+  const response = await http.post<import("../types").CreateApiKeyResponse>("/api-keys", payload);
+  return response.data;
+}
+
+export async function deleteApiKey(keyId: number): Promise<void> {
+  await http.delete(`/api-keys/${keyId}`);
+}
+
+export async function deactivateApiKey(keyId: number): Promise<import("../types").ApiKeyInfo> {
+  const response = await http.patch<import("../types").ApiKeyInfo>(`/api-keys/${keyId}/deactivate`);
+  return response.data;
+}
+
+export async function activateApiKey(keyId: number): Promise<import("../types").ApiKeyInfo> {
+  const response = await http.patch<import("../types").ApiKeyInfo>(`/api-keys/${keyId}/activate`);
   return response.data;
 }
