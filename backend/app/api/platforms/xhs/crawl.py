@@ -20,14 +20,14 @@ from backend.app.api.platforms.xhs.pc import (
 )
 from backend.app.api.tasks import serialize_task
 from backend.app.core.database import get_db
-from backend.app.core.deps import get_current_user
+from backend.app.core.deps import get_current_user, resolve_account
 from backend.app.models import Note, NoteAsset, PlatformAccount, Task, User
 
 router = APIRouter(prefix="/xhs/crawl", tags=["xhs-crawl"])
 
 
 class CrawlSearchNotesRequest(BaseModel):
-    account_id: int
+    account_id: str
     keyword: str = Field(min_length=1, max_length=120)
     page: int = Field(default=1, ge=1)
     save_to_library: bool = True
@@ -35,20 +35,20 @@ class CrawlSearchNotesRequest(BaseModel):
 
 
 class CrawlNoteUrlsRequest(BaseModel):
-    account_id: int
+    account_id: str
     urls: list[str] = Field(min_length=1, max_length=50)
     save_to_library: bool = True
     fetch_comments: bool = False
 
 
 class CrawlUserNotesRequest(BaseModel):
-    account_id: int
+    account_id: str
     user_url: str = Field(min_length=1)
     save_to_library: bool = True
 
 
 class DataCrawlRequest(BaseModel):
-    account_id: int
+    account_id: str
     mode: Literal["note_urls", "search", "comments"]
     urls: list[str] = Field(default_factory=list, max_length=100)
     keyword: str = Field(default="", max_length=120)
@@ -234,16 +234,8 @@ def _smart_get_note_info(adapter: Any, url: str) -> tuple[bool, str, Any]:
     return adapter.get_note_info_by_id(note_id)
 
 
-def _owned_pc_account(db: Session, current_user: User, account_id: int) -> PlatformAccount:
-    account = db.get(PlatformAccount, account_id)
-    if (
-        account is None
-        or account.user_id != current_user.id
-        or account.platform != "xhs"
-        or account.sub_type != "pc"
-    ):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
-    return account
+def _owned_pc_account(db: Session, current_user: User, account_id: str) -> PlatformAccount:
+    return resolve_account(db, current_user, account_id, sub_type="pc")
 
 
 @router.post("/search-notes")
@@ -323,7 +315,7 @@ def crawl_note_urls(
 
 
 class FetchNotesRequest(BaseModel):
-    account_id: int
+    account_id: str
     urls: list[str] = Field(min_length=1, max_length=20)
     fetch_comments: bool = False
 

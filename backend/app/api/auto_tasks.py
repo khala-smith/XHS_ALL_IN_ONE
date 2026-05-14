@@ -14,7 +14,7 @@ from backend.app.api.platforms.xhs.pc import (
     get_xhs_pc_api_adapter_factory,
 )
 from backend.app.core.database import get_db
-from backend.app.core.deps import get_current_user
+from backend.app.core.deps import get_current_user, resolve_account
 from backend.app.core.security import decrypt_text
 from backend.app.core.time import shanghai_now
 from backend.app.models import (
@@ -37,8 +37,8 @@ router = APIRouter(prefix="/auto-tasks", tags=["auto-tasks"])
 class AutoTaskCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     keywords: list[str] = Field(min_length=1)
-    pc_account_id: int
-    creator_account_id: int
+    pc_account_id: str
+    creator_account_id: str
     ai_instruction: str = Field(default="", max_length=2000)
     schedule_type: str = Field(default="manual", pattern="^(manual|daily|weekly|interval)$")
     schedule_time: str = Field(default="09:00", max_length=5)
@@ -87,19 +87,8 @@ def _get_owned_auto_task(db: Session, current_user: User, task_id: int) -> AutoT
     return auto_task
 
 
-def _verify_account_ownership(db: Session, current_user: User, account_id: int, expected_sub_type: str) -> PlatformAccount:
-    account = db.get(PlatformAccount, account_id)
-    if (
-        account is None
-        or account.user_id != current_user.id
-        or account.platform != "xhs"
-        or account.sub_type != expected_sub_type
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"XHS {expected_sub_type} account not found",
-        )
-    return account
+def _verify_account_ownership(db: Session, current_user: User, account_id: str, expected_sub_type: str) -> PlatformAccount:
+    return resolve_account(db, current_user, account_id, sub_type=expected_sub_type)
 
 
 def _get_account_cookies(db: Session, account_id: int) -> str:
@@ -162,15 +151,15 @@ def create_auto_task(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _verify_account_ownership(db, current_user, payload.pc_account_id, "pc")
-    _verify_account_ownership(db, current_user, payload.creator_account_id, "creator")
+    pc_account = _verify_account_ownership(db, current_user, payload.pc_account_id, "pc")
+    creator_account = _verify_account_ownership(db, current_user, payload.creator_account_id, "creator")
 
     auto_task = AutoTask(
         user_id=current_user.id,
         name=payload.name,
         keywords=payload.keywords,
-        pc_account_id=payload.pc_account_id,
-        creator_account_id=payload.creator_account_id,
+        pc_account_id=pc_account.id,
+        creator_account_id=creator_account.id,
         ai_instruction=payload.ai_instruction,
         schedule_type=payload.schedule_type,
         schedule_time=payload.schedule_time,

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.adapters.xhs.pc_api_adapter import XhsPcApiAdapter
 from backend.app.core.database import get_db
-from backend.app.core.deps import get_current_user
+from backend.app.core.deps import get_current_user, resolve_account
 from backend.app.core.security import decrypt_text
 from backend.app.models import AccountCookieVersion, PlatformAccount, User
 from backend.app.services.mock_data import sample_notes
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/xhs/pc", tags=["xhs-pc"])
 
 
 class SearchNotesRequest(BaseModel):
-    account_id: int
+    account_id: str
     keyword: str = Field(min_length=1, max_length=120)
     page: int = Field(default=1, ge=1)
     sort_type_choice: int = Field(default=0, ge=0, le=4)
@@ -32,12 +32,12 @@ class SearchNotesRequest(BaseModel):
 
 
 class NoteDetailRequest(BaseModel):
-    account_id: int
+    account_id: str
     url: str = Field(min_length=1)
 
 
 class NoteCommentsRequest(BaseModel):
-    account_id: int
+    account_id: str
     note_url: str = Field(min_length=1)
 
 
@@ -278,15 +278,8 @@ def _normalize_detail_payload(raw_payload: dict[str, Any], source_url: str = "")
     return normalized
 
 
-def _get_owned_pc_account_cookies(db: Session, current_user: User, account_id: int) -> str:
-    account = db.get(PlatformAccount, account_id)
-    if (
-        account is None
-        or account.user_id != current_user.id
-        or account.platform != "xhs"
-        or account.sub_type != "pc"
-    ):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+def _get_owned_pc_account_cookies(db: Session, current_user: User, account_id: str) -> str:
+    account = resolve_account(db, current_user, account_id, sub_type="pc")
 
     cookie_version = db.scalars(
         select(AccountCookieVersion)

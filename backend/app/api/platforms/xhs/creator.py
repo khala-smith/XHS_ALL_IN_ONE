@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from backend.app.adapters.xhs.creator_api_adapter import XhsCreatorApiAdapter
 from backend.app.api.tasks import serialize_task
 from backend.app.core.database import get_db
-from backend.app.core.deps import get_current_user
+from backend.app.core.deps import get_current_user, resolve_account
 from backend.app.core.security import decrypt_text
 from backend.app.models import AccountCookieVersion, PlatformAccount, Task, User
 
@@ -20,18 +20,18 @@ router = APIRouter(prefix="/xhs/creator", tags=["xhs-creator"])
 
 
 class CreatorKeywordRequest(BaseModel):
-    account_id: int
+    account_id: str
     keyword: str = Field(min_length=1, max_length=120)
 
 
 class CreatorUploadRequest(BaseModel):
-    account_id: int
+    account_id: str
     file_path: str = Field(min_length=1)
     media_type: Literal["image", "video"] = "image"
 
 
 class CreatorImagePublishRequest(BaseModel):
-    account_id: int
+    account_id: str
     title: str = Field(min_length=1, max_length=256)
     body: str = Field(default="")
     image_file_infos: list[dict[str, Any]] = Field(min_length=1)
@@ -44,7 +44,7 @@ class CreatorImagePublishRequest(BaseModel):
 
 
 class CreatorVideoPublishRequest(BaseModel):
-    account_id: int
+    account_id: str
     title: str = Field(min_length=1, max_length=256)
     body: str = Field(default="")
     video_info: dict[str, Any] = Field(default_factory=dict)
@@ -70,16 +70,8 @@ def _cookies_to_string(value: str) -> str:
     return stripped
 
 
-def _get_owned_creator_account(db: Session, current_user: User, account_id: int) -> PlatformAccount:
-    account = db.get(PlatformAccount, account_id)
-    if (
-        account is None
-        or account.user_id != current_user.id
-        or account.platform != "xhs"
-        or account.sub_type != "creator"
-    ):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Creator account not found")
-    return account
+def _get_owned_creator_account(db: Session, current_user: User, account_id: str) -> PlatformAccount:
+    return resolve_account(db, current_user, account_id, sub_type="creator")
 
 
 def _get_latest_creator_cookies(db: Session, account: PlatformAccount) -> str:
@@ -96,7 +88,7 @@ def _get_latest_creator_cookies(db: Session, account: PlatformAccount) -> str:
 def _adapter_for_account(
     db: Session,
     current_user: User,
-    account_id: int,
+    account_id: str,
     adapter_factory,
 ) -> tuple[PlatformAccount, Any]:
     account = _get_owned_creator_account(db, current_user, account_id)

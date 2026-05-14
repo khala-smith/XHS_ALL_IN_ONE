@@ -101,7 +101,7 @@ export type XhsNoteSearchResponse = {
 };
 
 export type XhsSearchOptions = {
-  account_id: number;
+  account_id: number | string;
   keyword: string;
   page?: number;
   sort_type_choice?: number;
@@ -115,7 +115,7 @@ export type XhsSearchOptions = {
 export type XhsDataCrawlMode = "note_urls" | "search" | "comments";
 
 export type XhsDataCrawlPayload = {
-  account_id: number;
+  account_id: number | string;
   mode: XhsDataCrawlMode;
   urls?: string[];
   keyword?: string;
@@ -661,8 +661,8 @@ export type AutoTask = {
 export type AutoTaskCreatePayload = {
   name: string;
   keywords: string[];
-  pc_account_id: number;
-  creator_account_id: number;
+  pc_account_id: number | string;
+  creator_account_id: number | string;
   ai_instruction?: string;
   schedule_type?: "manual" | "daily" | "weekly" | "interval";
   schedule_time?: string;

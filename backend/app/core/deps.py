@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
 from backend.app.core.security import decode_token
 from backend.app.core.time import shanghai_now
-from backend.app.models import ApiKey, User
+from backend.app.models import ApiKey, PlatformAccount, User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
@@ -68,3 +68,35 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+def resolve_account(
+    db: Session,
+    current_user: User,
+    account_id: str,
+    *,
+    platform: str = "xhs",
+    sub_type: str | None = None,
+) -> PlatformAccount:
+    """Resolve account by numeric ID or external_user_id (XHS native ID)."""
+    account = None
+    if account_id.isdigit():
+        account = db.get(PlatformAccount, int(account_id))
+    if account is None:
+        stmt = select(PlatformAccount).where(
+            PlatformAccount.user_id == current_user.id,
+            PlatformAccount.platform == platform,
+            PlatformAccount.external_user_id == account_id,
+        )
+        if sub_type:
+            stmt = stmt.where(PlatformAccount.sub_type == sub_type)
+        account = db.scalars(stmt.order_by(PlatformAccount.updated_at.desc())).first()
+    if (
+        account is None
+        or account.user_id != current_user.id
+        or account.platform != platform
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    if sub_type and account.sub_type != sub_type:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    return account

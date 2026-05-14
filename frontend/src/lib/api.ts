@@ -442,13 +442,13 @@ export async function crawlXhsDataStream(
   return result;
 }
 
-export async function fetchXhsNoteDetail(payload: { account_id: number; url: string }): Promise<XhsSearchNote> {
+export async function fetchXhsNoteDetail(payload: { account_id: number | string; url: string }): Promise<XhsSearchNote> {
   const response = await http.post<XhsSearchNote>("/xhs/pc/notes/detail", payload);
   return response.data;
 }
 
 export async function fetchXhsNoteComments(payload: {
-  account_id: number;
+  account_id: number | string;
   note_url: string;
 }): Promise<Paginated<NoteComment>> {
   const response = await http.post<{ total: number; items: NoteComment[] }>("/xhs/pc/notes/comments", payload);
@@ -461,7 +461,7 @@ export async function fetchXhsNoteComments(payload: {
 }
 
 export async function saveXhsNotesToLibrary(payload: {
-  account_id: number;
+  account_id: number | string;
   notes: XhsSearchNote[];
 }): Promise<SaveNotesResponse> {
   const response = await http.post<SaveNotesResponse>("/notes/batch-save", payload);
@@ -788,12 +788,12 @@ export async function importXhsCookieAccount(payload: {
   return response.data;
 }
 
-export async function checkAccount(accountId: number): Promise<PlatformAccount> {
+export async function checkAccount(accountId: number | string): Promise<PlatformAccount> {
   const response = await http.post<PlatformAccount>(`/accounts/${accountId}/check`);
   return response.data;
 }
 
-export async function deleteAccount(accountId: number): Promise<{ id: number; status: string }> {
+export async function deleteAccount(accountId: number | string): Promise<{ id: number; status: string }> {
   const response = await http.delete<{ id: number; status: string }>(`/accounts/${accountId}`);
   return response.data;
 }

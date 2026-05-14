@@ -12,7 +12,7 @@ from backend.app.adapters.xhs.creator_login_adapter import XhsCreatorLoginAdapte
 from backend.app.adapters.xhs.pc_api_adapter import XhsPcApiAdapter
 from backend.app.adapters.xhs.pc_login_adapter import XhsPcLoginAdapter
 from backend.app.core.database import get_db
-from backend.app.core.deps import get_current_user
+from backend.app.core.deps import get_current_user, resolve_account
 from backend.app.core.security import decrypt_text
 from backend.app.core.time import shanghai_now
 from backend.app.models import AccountCookieVersion, PlatformAccount, User
@@ -147,16 +147,14 @@ def import_cookie(
 
 @router.post("/{account_id}/check")
 def check_account(
-    account_id: int,
+    account_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     pc_adapter: XhsPcLoginAdapter = Depends(get_pc_account_adapter),
     creator_adapter: XhsCreatorLoginAdapter = Depends(get_creator_account_adapter),
     self_profile_adapter: XhsSelfProfileAdapter = Depends(get_xhs_self_profile_adapter),
 ):
-    account = db.get(PlatformAccount, account_id)
-    if account is None or account.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    account = resolve_account(db, current_user, account_id)
 
     cookie_version = db.scalars(
         select(AccountCookieVersion)
@@ -210,23 +208,21 @@ def check_account(
 
 
 @router.patch("/{account_id}")
-def update_account(account_id: int):
+def update_account(account_id: str):
     return {"id": account_id, "status": "updated"}
 
 
 @router.delete("/{account_id}")
 def delete_account(
-    account_id: int,
+    account_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    account = db.get(PlatformAccount, account_id)
-    if account is None or account.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    account = resolve_account(db, current_user, account_id)
     for cookie_version in db.scalars(
         select(AccountCookieVersion).where(AccountCookieVersion.platform_account_id == account.id)
     ).all():
         db.delete(cookie_version)
     db.delete(account)
     db.commit()
-    return {"id": account_id, "status": "deleted"}
+    return {"id": account.id, "status": "deleted"}
