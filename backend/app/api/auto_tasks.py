@@ -17,6 +17,7 @@ from backend.app.core.database import get_db
 from backend.app.core.deps import get_current_user, resolve_account
 from backend.app.core.security import decrypt_text
 from backend.app.core.time import shanghai_now
+from backend.app.schemas.common import AccountId
 from backend.app.models import (
     AccountCookieVersion,
     AiDraft,
@@ -37,8 +38,8 @@ router = APIRouter(prefix="/auto-tasks", tags=["auto-tasks"])
 class AutoTaskCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     keywords: list[str] = Field(min_length=1)
-    pc_account_id: str
-    creator_account_id: str
+    pc_account_id: AccountId
+    creator_account_id: AccountId
     ai_instruction: str = Field(default="", max_length=2000)
     schedule_type: str = Field(default="manual", pattern="^(manual|daily|weekly|interval)$")
     schedule_time: str = Field(default="09:00", max_length=5)

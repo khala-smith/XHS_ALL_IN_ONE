@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Annotated, Any, Iterable
+
+from pydantic import BeforeValidator
+
+AccountId = Annotated[str, BeforeValidator(lambda v: str(v))]
 
 
 def paginated(items: Iterable[Any], page: int = 1, page_size: int = 20) -> dict:

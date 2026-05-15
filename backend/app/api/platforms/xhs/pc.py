@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.adapters.xhs.pc_api_adapter import XhsPcApiAdapter
+from backend.app.schemas.common import AccountId
 from backend.app.core.database import get_db
 from backend.app.core.deps import get_current_user, resolve_account
 from backend.app.core.security import decrypt_text
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/xhs/pc", tags=["xhs-pc"])
 
 
 class SearchNotesRequest(BaseModel):
-    account_id: str
+    account_id: AccountId
     keyword: str = Field(min_length=1, max_length=120)
     page: int = Field(default=1, ge=1)
     sort_type_choice: int = Field(default=0, ge=0, le=4)
@@ -32,12 +33,12 @@ class SearchNotesRequest(BaseModel):
 
 
 class NoteDetailRequest(BaseModel):
-    account_id: str
+    account_id: AccountId
     url: str = Field(min_length=1)
 
 
 class NoteCommentsRequest(BaseModel):
-    account_id: str
+    account_id: AccountId
     note_url: str = Field(min_length=1)
 
 

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.adapters.xhs.creator_api_adapter import XhsCreatorApiAdapter
+from backend.app.schemas.common import AccountId
 from backend.app.api.tasks import serialize_task
 from backend.app.core.database import get_db
 from backend.app.core.deps import get_current_user, resolve_account
@@ -20,18 +21,18 @@ router = APIRouter(prefix="/xhs/creator", tags=["xhs-creator"])
 
 
 class CreatorKeywordRequest(BaseModel):
-    account_id: str
+    account_id: AccountId
     keyword: str = Field(min_length=1, max_length=120)
 
 
 class CreatorUploadRequest(BaseModel):
-    account_id: str
+    account_id: AccountId
     file_path: str = Field(min_length=1)
     media_type: Literal["image", "video"] = "image"
 
 
 class CreatorImagePublishRequest(BaseModel):
-    account_id: str
+    account_id: AccountId
     title: str = Field(min_length=1, max_length=256)
     body: str = Field(default="")
     image_file_infos: list[dict[str, Any]] = Field(min_length=1)
@@ -44,7 +45,7 @@ class CreatorImagePublishRequest(BaseModel):
 
 
 class CreatorVideoPublishRequest(BaseModel):
-    account_id: str
+    account_id: AccountId
     title: str = Field(min_length=1, max_length=256)
     body: str = Field(default="")
     video_info: dict[str, Any] = Field(default_factory=dict)
